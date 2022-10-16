@@ -11,6 +11,12 @@ const blockNumberTrack = (pre, curr) => {
   return typeof pre === "string" ? curr + 1 : pre + 1;
 };
 
+const commitPreReq = ({ ...object }) => {
+  return (
+    web3.utils.fromWei(object?.balance, "ether") >= 0.5 && object?.count >= 10
+  );
+};
+
 const commit_to_db = async (address) => {
   const data = db`
     insert into etherAddress (address) values (${address})
@@ -23,7 +29,9 @@ const commit_to_db = async (address) => {
 };
 
 const processAddress = async (address) => {
-  await commit_to_db(address);
+  const balance = await web3.eth.getBalance(address);
+  const count = await web3.eth.getTransactionCount(address);
+  if (commitPreReq({ address, balance, count })) await commit_to_db(address);
 };
 
 const processTransaction = async (tx, blockNumber) => {
