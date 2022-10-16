@@ -5,7 +5,8 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "start": "node address_fetch"
+    "start:ether": "node ether_address_fetch.js",
+    "start:binance": "node binance_address_fetch.js"
   },
   "dependencies": {
     "postgres": "^3.3.1",
