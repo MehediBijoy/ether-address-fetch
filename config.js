@@ -6,7 +6,12 @@ export const db_config = {
   database: "ether-address",
 };
 
-export const rpc_config = {
-  startBlock: "15763645",
+export const bnb_config = {
+  startBlock: "22260112",
   rpc_url: "https://binance.nodereal.io",
+};
+
+export const ether_config = {
+  startBlock: "15769452",
+  rpc_url: "https://mainnet.infura.io/v3/d9fadc9580654b62ab44cf0b5d289c53",
 };

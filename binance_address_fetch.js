@@ -1,25 +1,28 @@
 import Web3 from "web3";
 import postgres from "postgres";
-import { db_config, rpc_config } from "./config.js";
+import { db_config, bnb_config } from "./config.js";
 
 const db = postgres(db_config);
-
-const web3 = new Web3(new Web3.providers.HttpProvider(rpc_config.rpc_url));
+const web3 = new Web3(new Web3.providers.HttpProvider(bnb_config.rpc_url));
 
 const delay = async () => new Promise((resolve) => setTimeout(resolve, 1000));
 const blockNumberTrack = (pre, curr) => {
   return typeof pre === "string" ? curr + 1 : pre + 1;
 };
 
-const commitPreReq = ({ ...object }) => {
+const validate = (address) => {
+  return address && web3.utils.checkAddressChecksum(address);
+};
+
+const commit_pre_req = (object) => {
   return (
-    web3.utils.fromWei(object?.balance, "ether") >= 0.5 && object?.count >= 10
+    web3.utils.fromWei(object?.balance, "ether") >= 0.5 && object?.count >= 5
   );
 };
 
-const commit_to_db = async (address) => {
+const commit_to_db = async (object) => {
   const data = db`
-    insert into etherAddress (address) values (${address})
+    insert into etherAddress (address) values (${object?.address})
   `;
   try {
     await data.execute();
@@ -28,23 +31,30 @@ const commit_to_db = async (address) => {
   }
 };
 
-const processAddress = async (address) => {
-  const balance = await web3.eth.getBalance(address);
-  const count = await web3.eth.getTransactionCount(address);
-  if (commitPreReq({ address, balance, count })) await commit_to_db(address);
+const processAddress = async (address, blockNumber) => {
+  try {
+    const balance = await web3.eth.getBalance(address);
+    const count = await web3.eth.getTransactionCount(address);
+    const object = {
+      address: address,
+      balance: web3.utils.fromWei(balance, "ether"),
+      count: count,
+      blockNumber: blockNumber,
+    };
+    if (commit_pre_req(object)) await commit_to_db(object);
+  } catch {}
 };
 
 const processTransaction = async (tx, blockNumber) => {
   try {
-    console.log("TX --> : ", tx, " Block Number: -->: ", blockNumber);
     const data = await web3.eth.getTransaction(tx);
 
-    if (data?.to && web3.utils.checkAddressChecksum(data?.to)) {
-      await processAddress(data.to);
+    if (validate(data?.to)) {
+      await processAddress(data?.to, blockNumber);
     }
 
-    if (data?.from && web3.utils.checkAddressChecksum(data?.from)) {
-      await processAddress(data?.from);
+    if (validate(data?.from)) {
+      await processAddress(data?.from, blockNumber);
     }
   } catch {}
 };
@@ -64,11 +74,15 @@ const getBlock = async (blockNumber) => {
 };
 
 const main = async () => {
-  let blockNumber = rpc_config.startBlock;
+  let blockNumber = bnb_config.startBlock;
   while (true) {
     const data = await getBlock(blockNumber);
     const transactions = data?.transactions?.map(
       async (tx) => await processTransaction(tx, blockNumber)
+    );
+    console.log(
+      `Transaction found in Block ${blockNumber}: --> `,
+      data?.transactions?.length
     );
     Promise.all([...transactions]);
     blockNumber = blockNumberTrack(blockNumber, data?.number);

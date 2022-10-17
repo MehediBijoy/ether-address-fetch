@@ -1,11 +1,9 @@
 import Web3 from "web3";
 import postgres from "postgres";
-import { db_config, rpc_config } from "./config.js";
+import { db_config, ether_config } from "./config.js";
 
 const db = postgres(db_config);
-
-const url = "https://mainnet.infura.io/v3/d9fadc9580654b62ab44cf0b5d289c53";
-const web3 = new Web3(new Web3.providers.HttpProvider(url));
+const web3 = new Web3(new Web3.providers.HttpProvider(ether_config.rpc_url));
 
 const queryKeys = {
   tx: "transactions",
@@ -19,10 +17,8 @@ const blockNumberTrack = (pre, curr) => {
   return typeof pre === "string" ? curr + 1 : pre + 1;
 };
 
-const commitPreReq = (object) => {
-  return (
-    web3.utils.fromWei(object?.balance, "ether") >= 0.5 && object?.count >= 10
-  );
+const commit_pre_req = (object) => {
+  return object?.balance >= 0.5 && object?.count >= 5;
 };
 
 const validate = (items, validateKey) => {
@@ -35,13 +31,13 @@ const validate = (items, validateKey) => {
   });
 };
 
-const commit_to_db = async (object) => {
+const commit_to_db = async (object, blockNumber) => {
   const data = db`
       insert into etherAddress (address) values (${object?.address})
     `;
 
   try {
-    if (commitPreReq(object)) await data.execute();
+    if (commit_pre_req(object)) await data.execute();
   } catch {
     data.cancel();
   }
@@ -61,7 +57,10 @@ const makeBatchRequest = async (queryKey, queryFn, lists) => {
           if (queryKey === queryKeys.tx) {
             resolve([res?.from, res?.to]);
           } else if (queryKey === queryKeys.balance) {
-            resolve({ address: params, [queryKey]: res });
+            resolve({
+              address: params,
+              [queryKey]: web3.utils.fromWei(res, "ether"),
+            });
           } else {
             resolve({ ...item, [queryKey]: res });
           }
@@ -75,7 +74,7 @@ const makeBatchRequest = async (queryKey, queryFn, lists) => {
   return Promise.all(promises);
 };
 
-const addressesProcess = async (addresses) => {
+const addressesProcess = async (addresses, blockNumber) => {
   const addressWithBalance = await makeBatchRequest(
     queryKeys.balance,
     web3.eth.getBalance,
@@ -87,8 +86,9 @@ const addressesProcess = async (addresses) => {
     web3.eth.getTransactionCount,
     validate(addressWithBalance, queryKeys.address)
   );
+
   console.log("processed addresses: --> ", address?.length);
-  address.map(commit_to_db);
+  address.forEach(async (item) => await commit_to_db(item, blockNumber));
 };
 
 const getBlock = async (blockNumber) => {
@@ -106,7 +106,7 @@ const getBlock = async (blockNumber) => {
 };
 
 const main = async () => {
-  let blockNumber = rpc_config.startBlock;
+  let blockNumber = ether_config.startBlock;
   while (true) {
     const data = await getBlock(blockNumber);
     const result = await makeBatchRequest(
