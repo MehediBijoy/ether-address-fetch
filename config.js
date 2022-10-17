@@ -7,6 +7,6 @@ export const db_config = {
 };
 
 export const rpc_config = {
-  startBlock: "15760615",
+  startBlock: "15763645",
   rpc_url: "https://binance.nodereal.io",
 };

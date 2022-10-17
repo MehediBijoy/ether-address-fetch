@@ -47,7 +47,7 @@ const commit_to_db = async (object) => {
   }
 };
 
-const makeBatchRequest = (queryKey, queryFn, lists) => {
+const makeBatchRequest = async (queryKey, queryFn, lists) => {
   const batch = new web3.BatchRequest();
 
   let promises = lists.map((item) => {
@@ -59,7 +59,7 @@ const makeBatchRequest = (queryKey, queryFn, lists) => {
       let req = queryFn.request(params, (error, res) => {
         if (!error) {
           if (queryKey === queryKeys.tx) {
-            resolve(res?.to, res?.from);
+            resolve([res?.from, res?.to]);
           } else if (queryKey === queryKeys.balance) {
             resolve({ address: params, [queryKey]: res });
           } else {
@@ -87,6 +87,7 @@ const addressesProcess = async (addresses) => {
     web3.eth.getTransactionCount,
     validate(addressWithBalance, queryKeys.address)
   );
+  console.log("processed addresses: --> ", address?.length);
   address.map(commit_to_db);
 };
 
@@ -113,7 +114,19 @@ const main = async () => {
       web3.eth.getTransaction,
       data?.transactions
     );
-    await addressesProcess(result);
+    const flatAddresses = [].concat(...result);
+
+    console.log(
+      `Transaction found in Block ${blockNumber}: --> `,
+      data?.transactions?.length
+    );
+
+    console.log(
+      `Address found in Block ${blockNumber}: --> `,
+      flatAddresses?.length
+    );
+
+    await addressesProcess(flatAddresses);
     blockNumber = blockNumberTrack(blockNumber, data?.number);
   }
 };
