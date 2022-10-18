@@ -75,19 +75,21 @@ const makeBatchRequest = async (queryKey, queryFn, lists) => {
 };
 
 const addressesProcess = async (addresses, blockNumber) => {
+  console.log("request for balances...");
   const addressWithBalance = await makeBatchRequest(
     queryKeys.balance,
     web3.eth.getBalance,
     validate(addresses)
   );
 
+  console.log("request for transaction count...");
   const address = await makeBatchRequest(
     queryKeys.txCount,
     web3.eth.getTransactionCount,
     validate(addressWithBalance, queryKeys.address)
   );
 
-  console.log("processed addresses: --> ", address?.length);
+  console.log("processed addresses: --> ", address?.length, "\n");
   address.forEach(async (item) => await commit_to_db(item, blockNumber));
 };
 
@@ -109,17 +111,19 @@ const main = async () => {
   let blockNumber = ether_config.startBlock;
   while (true) {
     const data = await getBlock(blockNumber);
+
+    console.log("Block Found: --> ", blockNumber);
+    console.log(
+      `Transaction found in Block ${blockNumber}: --> `,
+      data?.transactions?.length
+    );
+
     const result = await makeBatchRequest(
       queryKeys.tx,
       web3.eth.getTransaction,
       data?.transactions
     );
     const flatAddresses = [].concat(...result);
-
-    console.log(
-      `Transaction found in Block ${blockNumber}: --> `,
-      data?.transactions?.length
-    );
 
     console.log(
       `Address found in Block ${blockNumber}: --> `,
