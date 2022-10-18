@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "start:ether": "node ether_address_fetch.js",
+    "start:ether2": "node ether_address_fetch_v2.js",
     "start:binance": "node binance_address_fetch.js"
   },
   "dependencies": {

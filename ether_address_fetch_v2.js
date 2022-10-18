@@ -6,7 +6,6 @@ const db = postgres(db_config);
 const web3 = new Web3(new Web3.providers.HttpProvider(ether_config.rpc_url));
 
 const queryKeys = {
-  tx: "transactions",
   balance: "balance",
   txCount: "count",
   address: "address",
@@ -18,7 +17,7 @@ const blockNumberTrack = (pre, curr) => {
 };
 
 const commit_pre_req = (object) => {
-  return object?.balance >= 0.5 && object?.count >= 5;
+  return object?.balance >= 0.5;
 };
 
 const validate = (items, validateKey) => {
@@ -48,16 +47,11 @@ const makeBatchRequest = async (queryKey, queryFn, lists) => {
   const batch = new web3.BatchRequest();
 
   let promises = lists.map((item) => {
-    const params =
-      queryKey === queryKeys.tx || queryKey === queryKeys.balance
-        ? item
-        : item?.address;
+    const params = queryKey === queryKeys.balance ? item : item?.address;
     return new Promise((resolve) => {
       let req = queryFn.request(params, (error, res) => {
         if (!error) {
-          if (queryKey === queryKeys.tx) {
-            resolve([res?.from, res?.to]);
-          } else if (queryKey === queryKeys.balance) {
+          if (queryKey === queryKeys.balance) {
             resolve({
               address: params,
               [queryKey]: web3.utils.fromWei(res, "ether"),
@@ -75,6 +69,10 @@ const makeBatchRequest = async (queryKey, queryFn, lists) => {
   return Promise.all(promises);
 };
 
+const txProcessor = (txs) => {
+  return [].concat(...txs?.map((item) => [item?.from, item?.to]));
+};
+
 const addressesProcess = async (addresses, blockNumber) => {
   console.log("request for balances...");
   const addressWithBalance = await makeBatchRequest(
@@ -83,28 +81,20 @@ const addressesProcess = async (addresses, blockNumber) => {
     validate(addresses)
   );
 
-  console.log("request for transaction count...");
-  const address = await makeBatchRequest(
-    queryKeys.txCount,
-    web3.eth.getTransactionCount,
-    validate(addressWithBalance, queryKeys.address)
-  );
-
-  console.log("processed addresses: --> ", address?.length, "\n");
-  address.forEach((item) => commit_to_db(item, blockNumber));
+  console.log("processed addresses: --> ", addressWithBalance?.length, "\n");
+  addressWithBalance.forEach((item) => commit_to_db(item, blockNumber));
 };
 
-const getBlock = async (blockNumber) => {
+const getBlock = (blockNumber) => {
   console.log("request for block: --> ", blockNumber);
   return new Promise(async (resolve) => {
-    return await web3.eth.getBlock(blockNumber).then(async (data) => {
-      return data
-        ? resolve(data)
-        : (async () => {
-            await delay(),
-              await getBlock(blockNumber).then((data) => resolve(data));
-          })();
-    });
+    const data = await web3.eth.getBlock(blockNumber, true);
+    return await (data
+      ? resolve(data)
+      : (async () => {
+          await delay(),
+            await getBlock(blockNumber).then((new_data) => resolve(new_data));
+        })());
   });
 };
 
@@ -119,19 +109,14 @@ const main = async () => {
       data?.transactions?.length
     );
 
-    const result = await makeBatchRequest(
-      queryKeys.tx,
-      web3.eth.getTransaction,
-      data?.transactions
-    );
-    const flatAddresses = [].concat(...result);
+    const addresses = txProcessor(data?.transactions);
 
     console.log(
       `Address found in Block ${blockNumber}: --> `,
-      flatAddresses?.length
+      addresses?.length
     );
 
-    await addressesProcess(flatAddresses, blockNumber);
+    await addressesProcess(addresses, blockNumber);
     blockNumber = blockNumberTrack(blockNumber, data?.number);
   }
 };

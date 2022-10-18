@@ -12,6 +12,6 @@ export const bnb_config = {
 };
 
 export const ether_config = {
-  startBlock: "15769452",
+  startBlock: "15766861",
   rpc_url: "https://mainnet.infura.io/v3/d9fadc9580654b62ab44cf0b5d289c53",
 };
