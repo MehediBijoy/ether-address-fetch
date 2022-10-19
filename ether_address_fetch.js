@@ -1,139 +1,143 @@
-import Web3 from "web3";
-import postgres from "postgres";
-import { db_config, ether_config } from "./config.js";
+import Web3 from 'web3'
+import postgres from 'postgres'
+import {writeFile, readFileSync} from 'fs'
 
-const db = postgres(db_config);
-const web3 = new Web3(new Web3.providers.HttpProvider(ether_config.rpc_url));
+import {db_config, ether_config} from './config.js'
+
+const db = postgres(db_config)
+const web3 = new Web3(new Web3.providers.HttpProvider(ether_config.rpc_url))
 
 const queryKeys = {
-  tx: "transactions",
-  balance: "balance",
-  txCount: "count",
-  address: "address",
-};
+  balance: 'balance',
+  txCount: 'count',
+  address: 'address',
+}
 
-const delay = async () => new Promise((resolve) => setTimeout(resolve, 1000));
-const blockNumberTrack = (pre, curr) => {
-  return typeof pre === "string" ? curr + 1 : pre + 1;
-};
+const path = 'ether_block.txt'
 
-const commit_pre_req = (object) => {
-  return object?.balance >= 0.5 && object?.count >= 5;
-};
+const blockNumberTrack = (curr) => parseInt(curr) + 1
+const commit_pre_req = (object) => object?.balance >= 0.5
+const delay = async () => new Promise((resolve) => setTimeout(resolve, 1000))
+
+const saveLastBlock = (blockNumber) => {
+  try {
+    writeFile(path, blockNumber.toString(), (error) => {
+      if (error) console.log(error)
+    })
+  } catch (e) {
+    console.log(e)
+  }
+}
+
+const readInitalBlock = () => {
+  try {
+    const data = readFileSync(path, 'utf8')
+    return parseInt(data)
+  } catch {
+    return ether_config.startBlock
+  }
+}
 
 const validate = (items, validateKey) => {
-  return items.filter((item) => {
-    if (!validateKey) return item && web3.utils.checkAddressChecksum(item);
-    return (
+  if (!validateKey)
+    return items.filter((item) => item && web3.utils.checkAddressChecksum(item))
+
+  return items.filter(
+    (item) =>
       item?.[validateKey] &&
       web3.utils.checkAddressChecksum(item?.[validateKey])
-    );
-  });
-};
+  )
+}
 
 const commit_to_db = async (object, blockNumber) => {
   const data = db`
       insert into etherAddress (address) 
       values (${object?.address})
-    `;
+    `
 
   try {
-    if (commit_pre_req(object)) await data.execute();
+    if (commit_pre_req(object)) await data.execute()
   } catch {
-    data.cancel();
+    data.cancel()
   }
-};
+}
 
-const makeBatchRequest = async (queryKey, queryFn, lists) => {
-  const batch = new web3.BatchRequest();
+const makeBatchRequest = (queryKey, queryFn, lists) => {
+  const batch = new web3.BatchRequest()
 
   let promises = lists.map((item) => {
-    const params =
-      queryKey === queryKeys.tx || queryKey === queryKeys.balance
-        ? item
-        : item?.address;
+    const params = queryKey === queryKeys.balance ? item : item?.address
     return new Promise((resolve) => {
       let req = queryFn.request(params, (error, res) => {
-        if (!error) {
-          if (queryKey === queryKeys.tx) {
-            resolve([res?.from, res?.to]);
-          } else if (queryKey === queryKeys.balance) {
-            resolve({
-              address: params,
-              [queryKey]: web3.utils.fromWei(res, "ether"),
-            });
-          } else {
-            resolve({ ...item, [queryKey]: res });
-          }
+        if (error) resolve()
+        if (queryKey === queryKeys.balance) {
+          resolve({
+            address: params,
+            [queryKey]: web3.utils.fromWei(res, 'ether'),
+          })
+        } else {
+          resolve({...item, [queryKey]: res})
         }
-      });
-      batch.add(req);
-    });
-  });
-  batch.execute();
+      })
+      batch.add(req)
+    })
+  })
+  batch.execute()
 
-  return Promise.all(promises);
-};
+  return Promise.all(promises)
+}
+
+const txProcessor = (txs) => {
+  return [].concat(...txs?.map((item) => [item?.from, item?.to]))
+}
 
 const addressesProcess = async (addresses, blockNumber) => {
-  console.log("request for balances...");
+  console.log('request for balances...')
   const addressWithBalance = await makeBatchRequest(
     queryKeys.balance,
     web3.eth.getBalance,
     validate(addresses)
-  );
+  )
 
-  console.log("request for transaction count...");
-  const address = await makeBatchRequest(
-    queryKeys.txCount,
-    web3.eth.getTransactionCount,
-    validate(addressWithBalance, queryKeys.address)
-  );
+  console.log('processed addresses: --> ', addressWithBalance?.length, '\n')
+  addressWithBalance.forEach((item) => commit_to_db(item, blockNumber))
+}
 
-  console.log("processed addresses: --> ", address?.length, "\n");
-  address.forEach((item) => commit_to_db(item, blockNumber));
-};
-
-const getBlock = async (blockNumber) => {
-  console.log("request for block: --> ", blockNumber);
+const getBlock = (blockNumber) => {
+  console.log('request for block: --> ', blockNumber)
   return new Promise(async (resolve) => {
-    return await web3.eth.getBlock(blockNumber).then(async (data) => {
-      return data
-        ? resolve(data)
-        : (async () => {
-            await delay(),
-              await getBlock(blockNumber).then((data) => resolve(data));
-          })();
-    });
-  });
-};
+    const block = await web3.eth.getBlock(blockNumber, true)
+    return block
+      ? resolve(block)
+      : (async () => {
+          await delay()
+          getBlock(blockNumber).then((new_block) => resolve(new_block))
+        })()
+  })
+}
 
 const main = async () => {
-  let blockNumber = ether_config.startBlock;
+  let blockNumber = readInitalBlock()
   while (true) {
-    const data = await getBlock(blockNumber);
+    const data = await getBlock(blockNumber)
 
-    console.log("Block Found: --> ", blockNumber);
+    console.log('Block Found: --> ', blockNumber)
     console.log(
       `Transaction found in Block ${blockNumber}: --> `,
       data?.transactions?.length
-    );
+    )
 
-    const result = await makeBatchRequest(
-      queryKeys.tx,
-      web3.eth.getTransaction,
-      data?.transactions
-    );
-    const flatAddresses = [].concat(...result);
+    const addresses = txProcessor(data?.transactions)
 
     console.log(
       `Address found in Block ${blockNumber}: --> `,
-      flatAddresses?.length
-    );
+      addresses?.length
+    )
 
-    await addressesProcess(flatAddresses, blockNumber);
-    blockNumber = blockNumberTrack(blockNumber, data?.number);
+    await addressesProcess(addresses, blockNumber)
+    saveLastBlock(blockNumber)
+    blockNumber = blockNumberTrack(blockNumber)
   }
-};
+}
 
-await main();
+await main()

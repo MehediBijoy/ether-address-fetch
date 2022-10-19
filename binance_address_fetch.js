@@ -1,92 +1,92 @@
-import Web3 from "web3";
-import postgres from "postgres";
-import { db_config, bnb_config } from "./config.js";
+import Web3 from 'web3'
+import postgres from 'postgres'
+import {writeFile, readFileSync} from 'fs'
 
-const db = postgres(db_config);
-const web3 = new Web3(new Web3.providers.HttpProvider(bnb_config.rpc_url));
+import {db_config, bnb_config} from './config.js'
 
-const delay = async () => new Promise((resolve) => setTimeout(resolve, 1000));
-const blockNumberTrack = (pre, curr) => {
-  return typeof pre === "string" ? curr + 1 : pre + 1;
-};
+const db = postgres(db_config)
+const web3 = new Web3(new Web3.providers.HttpProvider(bnb_config.rpc_url))
 
-const validate = (address) => {
-  return address && web3.utils.checkAddressChecksum(address);
-};
+const path = 'binance_block.txt'
 
-const commit_pre_req = (object) => {
-  return (
-    web3.utils.fromWei(object?.balance, "ether") >= 0.5 && object?.count >= 5
-  );
-};
+const blockNumberTrack = (curr) => parseInt(curr) + 1
+const commit_pre_req = (object) => object?.balance >= 0.5
+const delay = async () => new Promise((resolve) => setTimeout(resolve, 1000))
 
-const commit_to_db = async (object) => {
-  const data = db`
-    insert into etherAddress (address) values (${object?.address})
-  `;
+const saveLastBlock = (blockNumber) => {
   try {
-    await data.execute();
-  } catch {
-    data.cancel();
+    writeFile(path, blockNumber.toString(), (error) => {
+      if (error) console.log(error)
+    })
+  } catch (e) {
+    console.log(e)
   }
-};
+}
+
+const readInitalBlock = () => {
+  try {
+    const data = readFileSync(path, 'utf8')
+    return parseInt(data)
+  } catch {
+    return bnb_config.startBlock
+  }
+}
+
+const commit_to_db = async (object, blockNumber) => {
+  const data = db`
+    insert into etherAddress (address) 
+    values (${object?.address})
+  `
+  try {
+    await data.execute()
+  } catch {
+    data.cancel()
+  }
+}
 
 const processAddress = async (address, blockNumber) => {
   try {
-    const balance = await web3.eth.getBalance(address);
-    const count = await web3.eth.getTransactionCount(address);
+    const balance = await web3.eth.getBalance(address)
     const object = {
       address: address,
-      balance: web3.utils.fromWei(balance, "ether"),
-      count: count,
+      balance: web3.utils.fromWei(balance, 'ether'),
       blockNumber: blockNumber,
-    };
-    if (commit_pre_req(object)) await commit_to_db(object);
-  } catch {}
-};
-
-const processTransaction = async (tx, blockNumber) => {
-  try {
-    const data = await web3.eth.getTransaction(tx);
-
-    if (validate(data?.to)) {
-      await processAddress(data?.to, blockNumber);
     }
-
-    if (validate(data?.from)) {
-      await processAddress(data?.from, blockNumber);
-    }
+    if (commit_pre_req(object)) await commit_to_db(object, blockNumber)
   } catch {}
-};
+}
+
+const txProcessor = (txs) => {
+  return [].concat(...txs?.map((item) => [item?.from, item?.to]))
+}
 
 const getBlock = async (blockNumber) => {
-  console.log("request for block: --> ", blockNumber);
+  console.log('request for block: --> ', blockNumber)
   return new Promise(async (resolve) => {
-    return await web3.eth.getBlock(blockNumber).then(async (data) => {
-      return data
-        ? resolve(data)
-        : (async () => {
-            await delay(),
-              await getBlock(blockNumber).then((data) => resolve(data));
-          })();
-    });
-  });
-};
+    const block = await web3.eth.getBlock(blockNumber, true)
+    return block
+      ? resolve(block)
+      : (async () => {
+          await delay()
+          getBlock(blockNumber).then((new_block) => resolve(new_block))
+        })()
+  })
+}
 
 const main = async () => {
-  let blockNumber = bnb_config.startBlock;
-  while (true) {
-    const data = await getBlock(blockNumber);
-    const transactions = data?.transactions?.map(
-      async (tx) => await processTransaction(tx, blockNumber)
-    );
-    console.log(
-      `Transaction found in Block ${blockNumber}: --> `,
-      data?.transactions?.length
-    );
-    Promise.all([...transactions]);
-    blockNumber = blockNumberTrack(blockNumber, data?.number);
-  }
-};
+  let blockNumber = readInitalBlock()
 
-await main();
+  while (true) {
+    const data = await getBlock(blockNumber)
+    const addresses = txProcessor(data?.transactions)
+    console.log(
+      `Addresses found in Block ${blockNumber}: --> `,
+      addresses?.length
+    )
+    addresses.forEach((address) => processAddress(address))
+    saveLastBlock(blockNumber)
+    blockNumber = blockNumberTrack(blockNumber)
+  }
+}
+
+await main()

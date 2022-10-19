@@ -6,11 +6,10 @@
   "license": "MIT",
   "scripts": {
     "start:ether": "node ether_address_fetch.js",
-    "start:ether2": "node ether_address_fetch_v2.js",
     "start:binance": "node binance_address_fetch.js"
   },
   "dependencies": {
     "postgres": "^3.3.1",
-    "web3": "^1.8.0"
+    "web3": "3.0.0-rc.5"
   }
 }
