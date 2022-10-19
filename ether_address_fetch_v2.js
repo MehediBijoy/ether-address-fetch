@@ -21,13 +21,16 @@ const commit_pre_req = (object) => {
 };
 
 const validate = (items, validateKey) => {
-  return items.filter((item) => {
-    if (!validateKey) return item && web3.utils.checkAddressChecksum(item);
-    return (
+  if (!validateKey)
+    return items.filter(
+      (item) => item && web3.utils.checkAddressChecksum(item)
+    );
+
+  return items.filter(
+    (item) =>
       item?.[validateKey] &&
       web3.utils.checkAddressChecksum(item?.[validateKey])
-    );
-  });
+  );
 };
 
 const commit_to_db = async (object, blockNumber) => {
@@ -43,22 +46,21 @@ const commit_to_db = async (object, blockNumber) => {
   }
 };
 
-const makeBatchRequest = async (queryKey, queryFn, lists) => {
+const makeBatchRequest = (queryKey, queryFn, lists) => {
   const batch = new web3.BatchRequest();
 
   let promises = lists.map((item) => {
     const params = queryKey === queryKeys.balance ? item : item?.address;
     return new Promise((resolve) => {
       let req = queryFn.request(params, (error, res) => {
-        if (!error) {
-          if (queryKey === queryKeys.balance) {
-            resolve({
-              address: params,
-              [queryKey]: web3.utils.fromWei(res, "ether"),
-            });
-          } else {
-            resolve({ ...item, [queryKey]: res });
-          }
+        if (error) resolve();
+        if (queryKey === queryKeys.balance) {
+          resolve({
+            address: params,
+            [queryKey]: web3.utils.fromWei(res, "ether"),
+          });
+        } else {
+          resolve({ ...item, [queryKey]: res });
         }
       });
       batch.add(req);
@@ -88,13 +90,13 @@ const addressesProcess = async (addresses, blockNumber) => {
 const getBlock = (blockNumber) => {
   console.log("request for block: --> ", blockNumber);
   return new Promise(async (resolve) => {
-    const data = await web3.eth.getBlock(blockNumber, true);
-    return await (data
-      ? resolve(data)
+    const block = await web3.eth.getBlock(blockNumber, true);
+    return block
+      ? resolve(block)
       : (async () => {
-          await delay(),
-            await getBlock(blockNumber).then((new_data) => resolve(new_data));
-        })());
+          await delay();
+          getBlock(blockNumber).then((new_block) => resolve(new_block));
+        })();
   });
 };
 
