@@ -32,9 +32,9 @@ const saveLastBlock = (blockNumber) => {
 const readInitalBlock = () => {
   try {
     const data = readFileSync(path, 'utf8')
-    return parseInt(data)
+    return parseInt(data) + 1
   } catch {
-    return ether_config.startBlock
+    return parseInt(ether_config.startBlock) + 1
   }
 }
 
@@ -92,7 +92,7 @@ const txProcessor = (txs) => {
 }
 
 const addressesProcess = async (addresses, blockNumber) => {
-  console.log('request for balances...')
+  console.log('request balances for total address: --> ', addresses?.length)
   const addressWithBalance = await makeBatchRequest(
     queryKeys.balance,
     web3.eth.getBalance,
@@ -118,6 +118,7 @@ const getBlock = (blockNumber) => {
 
 const main = async () => {
   let blockNumber = readInitalBlock()
+  let addresses = []
   while (true) {
     const data = await getBlock(blockNumber)
 
@@ -127,15 +128,20 @@ const main = async () => {
       data?.transactions?.length
     )
 
-    const addresses = txProcessor(data?.transactions)
-
+    const addressInTxs = txProcessor(data?.transactions)
     console.log(
       `Address found in Block ${blockNumber}: --> `,
-      addresses?.length
+      addressInTxs?.length
     )
 
-    await addressesProcess(addresses, blockNumber)
-    saveLastBlock(blockNumber)
+    addresses.push(...addressInTxs)
+
+    if (addresses.length >= 1000) {
+      await addressesProcess(addresses, blockNumber)
+      saveLastBlock(blockNumber)
+      addresses = []
+    }
+
     blockNumber = blockNumberTrack(blockNumber)
   }
 }
