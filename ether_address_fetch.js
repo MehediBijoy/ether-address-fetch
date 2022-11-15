@@ -121,21 +121,14 @@ const main = async () => {
     const data = await getBlock(blockNumber)
 
     console.log('Block Found: --> ', blockNumber)
-    console.log(
-      `Transaction found in Block ${blockNumber}: --> `,
-      data?.transactions?.length
-    )
-
     const addressInTxs = txProcessor(data?.transactions)
-    console.log(
-      `Address found in Block ${blockNumber}: --> `,
-      addressInTxs?.length
-    )
 
     addresses.push(...addressInTxs)
 
     if (addresses.length >= ether_config.batchSize) {
+      console.log('Total address for process: --> ', addresses.length)
       const addressForProcess = addresses.splice(0, ether_config.batchSize)
+      console.log('Address left for next process: --> ', addresses.length)
       await addressesProcess(addressForProcess, blockNumber)
       saveLastBlock(blockNumber)
     }
