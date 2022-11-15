@@ -72,7 +72,7 @@ const makeBatchRequest = (queryKey, queryFn, lists) => {
     return new Promise((resolve) => {
       let req = queryFn.request(params, (error, res) => {
         if (error) return resolve()
-        else resolve({...item, [queryKey]: res})
+        else return resolve({...item, [queryKey]: res})
       })
       batch.add(req)
     })
