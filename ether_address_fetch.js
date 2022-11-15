@@ -134,10 +134,10 @@ const main = async () => {
 
     addresses.push(...addressInTxs)
 
-    if (addresses.length >= 1000) {
-      await addressesProcess(addresses, blockNumber)
+    if (addresses.length >= ether_config.batchSize) {
+      const addressForProcess = addresses.splice(0, ether_config.batchSize)
+      await addressesProcess(addressForProcess, blockNumber)
       saveLastBlock(blockNumber)
-      addresses = []
     }
 
     blockNumber = blockNumberTrack(blockNumber)
