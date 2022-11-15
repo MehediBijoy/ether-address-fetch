@@ -1,4 +1,5 @@
 import Web3 from 'web3'
+import chalk from 'chalk'
 import postgres from 'postgres'
 import {writeFile, readFileSync} from 'fs'
 
@@ -97,7 +98,7 @@ const addressesProcess = async (addresses, blockNumber) => {
   )
 
   const addressWithBalance = getBalances.filter(Boolean)
-  console.log('processed addresses: --> ', addressWithBalance?.length, '\n')
+  console.log('processed addresses: --> ', addressWithBalance?.length)
   addressWithBalance.forEach((item) => commit_to_db(item, blockNumber))
 }
 
@@ -121,16 +122,20 @@ const main = async () => {
     const data = await getBlock(blockNumber)
 
     console.log('Block Found: --> ', blockNumber)
+    console.log('Txs found: --> ', data.transactions.length)
     const addressInTxs = txProcessor(data?.transactions)
+    console.log('Address found: --> ', addressInTxs.length)
 
     addresses.push(...addressInTxs)
 
     if (addresses.length >= ether_config.batchSize) {
-      console.log('Total address for process: --> ', addresses.length)
+      console.log(chalk.green('\nStart address processing'))
+      console.log('Total address in pool: --> ', addresses.length)
       const addressForProcess = addresses.splice(0, ether_config.batchSize)
       console.log('Address left for next process: --> ', addresses.length)
       await addressesProcess(addressForProcess, blockNumber)
       saveLastBlock(blockNumber)
+      console.log(chalk.red('completed process address\n'))
     }
 
     blockNumber = blockNumberTrack(blockNumber)
