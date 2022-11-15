@@ -7,11 +7,12 @@ export const db_config = {
 }
 
 export const bnb_config = {
-  startBlock: '22265410',
-  rpc_url: 'https://binance.nodereal.io',
+  startBlock: '15779400',
+  rpc_url: 'https://rpc.ankr.com/eth',
 }
 
 export const ether_config = {
+  batchSize: 800,
   startBlock: '15779400',
-  rpc_url: 'https://mainnet.infura.io/v3/d9fadc9580654b62ab44cf0b5d289c53',
+  rpc_url: 'https://rpc.ankr.com/eth',
 }

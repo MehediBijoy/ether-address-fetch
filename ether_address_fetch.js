@@ -16,8 +16,10 @@ const queryKeys = {
 const path = 'ether_block.txt'
 
 const blockNumberTrack = (curr) => parseInt(curr) + 1
-const commit_pre_req = (object) => object?.balance >= 0.5
 const delay = async () => new Promise((resolve) => setTimeout(resolve, 1000))
+const commit_pre_req = (object) => {
+  return web3.utils.fromWei(object?.balance, 'ether') >= 0.5
+}
 
 const saveLastBlock = (blockNumber) => {
   try {
@@ -66,18 +68,11 @@ const makeBatchRequest = (queryKey, queryFn, lists) => {
   const batch = new web3.BatchRequest()
 
   let promises = lists.map((item) => {
-    const params = queryKey === queryKeys.balance ? item : item?.address
+    const params = item?.address
     return new Promise((resolve) => {
       let req = queryFn.request(params, (error, res) => {
-        if (error) resolve()
-        if (queryKey === queryKeys.balance) {
-          resolve({
-            address: params,
-            [queryKey]: web3.utils.fromWei(res, 'ether'),
-          })
-        } else {
-          resolve({...item, [queryKey]: res})
-        }
+        if (error) return resolve()
+        else resolve({...item, [queryKey]: res})
       })
       batch.add(req)
     })
@@ -88,17 +83,20 @@ const makeBatchRequest = (queryKey, queryFn, lists) => {
 }
 
 const txProcessor = (txs) => {
-  return [].concat(...txs?.map((item) => [item?.from, item?.to]))
+  return [].concat(
+    ...txs?.map((item) => [{address: item?.from}, {address: item?.to}])
+  )
 }
 
 const addressesProcess = async (addresses, blockNumber) => {
   console.log('request balances for total address: --> ', addresses?.length)
-  const addressWithBalance = await makeBatchRequest(
+  const getBalances = await makeBatchRequest(
     queryKeys.balance,
     web3.eth.getBalance,
-    validate(addresses)
+    validate(addresses, queryKeys.address)
   )
 
+  const addressWithBalance = getBalances.filter(Boolean)
   console.log('processed addresses: --> ', addressWithBalance?.length, '\n')
   addressWithBalance.forEach((item) => commit_to_db(item, blockNumber))
 }
