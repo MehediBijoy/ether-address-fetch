@@ -128,7 +128,7 @@ const main = async () => {
 
     addresses.push(...addressInTxs)
 
-    if (addresses.length >= ether_config.batchSize) {
+    while (addresses.length >= ether_config.batchSize) {
       console.log(chalk.green('\nStart address processing'))
       console.log('Total address in pool: --> ', addresses.length)
       const addressForProcess = addresses.splice(0, ether_config.batchSize)

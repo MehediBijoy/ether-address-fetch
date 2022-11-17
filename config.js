@@ -12,7 +12,7 @@ export const bnb_config = {
 }
 
 export const ether_config = {
-  batchSize: 800,
+  batchSize: 1000,
   startBlock: '15779400',
   rpc_url: 'https://rpc.ankr.com/eth',
 }
