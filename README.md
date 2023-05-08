@@ -12,4 +12,3 @@ yarn start:ether
 ```bash
 yarn start:binance
 ```
-
